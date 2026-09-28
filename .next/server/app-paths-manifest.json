@@ -1,0 +1,9 @@
+{
+  "/api/sim/[token]/route": "app/api/sim/[token]/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/sim/[token]/page": "app/sim/[token]/page.js",
+  "/(admin)/campaigns/page": "app/(admin)/campaigns/page.js",
+  "/(employee)/page": "app/(employee)/page.js",
+  "/(employee)/learn/page": "app/(employee)/learn/page.js",
+  "/(employee)/report/page": "app/(employee)/report/page.js"
+}
