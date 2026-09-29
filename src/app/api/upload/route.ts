@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     // --- Real Supabase Storage upload (uncomment when ready) ---
-    /*
+    
     const supabase = await createClient();
 
     const {
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     } = supabase.storage.from("report-screenshots").getPublicUrl(data.path);
 
     return NextResponse.json({ url: publicUrl, path: data.path });
-    */
+    
 
     // --- Demo fallback (no Supabase yet) ---
     // Convert to base64 data URL so the frontend can still preview it
