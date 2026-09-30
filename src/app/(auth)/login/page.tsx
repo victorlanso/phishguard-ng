@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 
@@ -13,27 +13,18 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-      // Demo mode (no Supabase keys)
-      if (!supabaseUrl || !supabaseKey) {
-        toast.success("Demo mode – logged in!");
-        router.push("/");
-        return;
-      }
-
       const supabase = createClient();
 
       if (isSignUp) {
-        // Sign up
-        const { data, error } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -42,22 +33,16 @@ export default function LoginPage() {
             },
           },
         });
-
         if (error) throw error;
-
-        toast.success("Account created! Please check your email to confirm.");
-        // After signup you can automatically log them in or ask them to login
+        toast.success("Account created! Check your email to confirm.");
       } else {
-        // Login
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-
         if (error) throw error;
-
         toast.success("Welcome back!");
-        router.push("/");
+        router.push(next);
         router.refresh();
       }
     } catch (err: any) {
@@ -112,11 +97,7 @@ export default function LoginPage() {
           </div>
 
           <Button type="submit" className="w-full" size="lg" disabled={loading}>
-            {loading
-              ? "Please wait..."
-              : isSignUp
-              ? "Create Account"
-              : "Sign In"}
+            {loading ? "Please wait..." : isSignUp ? "Create Account" : "Sign In"}
           </Button>
 
           <p className="text-sm text-center text-slate-500">
