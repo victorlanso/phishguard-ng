@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server"; // make sure this exists
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
   try {
@@ -7,7 +7,10 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      return NextResponse.json(
+        { error: "No file provided" },
+        { status: 400 }
+      );
     }
 
     // Validate file type
@@ -26,46 +29,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Supabase Storage Upload ---
-    const supabase = createClient();
+    // --- Real Supabase Storage upload ---
+    const supabase = await createClient();
 
     const {
       data: { user },
-      error: userError,
     } = await supabase.auth.getUser();
 
-    if (userError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const fileExt = file.name.split(".").pop();
     const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
-    // Convert File → Uint8Array
-    const fileBuffer = new Uint8Array(await file.arrayBuffer());
-
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from("report-screenshots")
-      .upload(fileName, fileBuffer, {
-        contentType: file.type,
+      .upload(fileName, file, {
         cacheControl: "3600",
         upsert: false,
       });
 
-    if (uploadError) {
-      console.error("Upload error:", uploadError);
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    if (error) {
+      console.error("Upload error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const { data: publicData } = supabase.storage
-      .from("report-screenshots")
-      .getPublicUrl(uploadData.path);
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("report-screenshots").getPublicUrl(data.path);
 
     return NextResponse.json({
-      url: publicData.publicUrl,
-      path: uploadData.path,
+      url: publicUrl,
+      path: data.path,
     });
-
   } catch (error) {
     console.error("Upload failed:", error);
     return NextResponse.json(
