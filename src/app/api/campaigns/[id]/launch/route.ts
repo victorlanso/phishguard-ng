@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { campaignStore } from "@/lib/store";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(
   request: NextRequest,
@@ -7,12 +7,38 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const campaign = campaignStore.findById(id);
+    const supabase = await createClient();
 
-    if (!campaign) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get campaign + results
+    const { data: campaign, error } = await supabase
+      .from("campaigns")
+      .select(`
+        *,
+        campaign_results (
+          id, email, name, token, tracking_url, opened, clicked, reported
+        )
+      `)
+      .eq("id", id)
+      .single();
+
+    if (error || !campaign) {
+      return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
+
+    const results = campaign.campaign_results || [];
+
+    if (results.length === 0) {
       return NextResponse.json(
-        { error: "Campaign not found" },
-        { status: 404 }
+        { error: "No targets found for this campaign" },
+        { status: 400 }
       );
     }
 
@@ -25,31 +51,31 @@ export async function POST(
       const { Resend } = await import("resend");
       const resend = new Resend(resendApiKey);
 
-      const results = [];
+      const sendResults = [];
 
-      for (const target of campaign.results) {
+      for (const target of results) {
         try {
           const html = buildSimulationEmail({
-            name: target.name,
-            trackingUrl: target.trackingUrl,
-            templateName: campaign.templateName,
+            name: target.name || "User",
+            trackingUrl: target.tracking_url,
+            templateName: campaign.name,
           });
 
-          const { data, error } = await resend.emails.send({
+          const { data, error: sendError } = await resend.emails.send({
             from: fromEmail,
             to: target.email,
-            subject: getSubject(campaign.templateName),
+            subject: getSubject(campaign.name),
             html,
           });
 
-          results.push({
+          sendResults.push({
             email: target.email,
-            success: !error,
+            success: !sendError,
             id: data?.id,
-            error: error?.message,
+            error: sendError?.message,
           });
         } catch (err: any) {
-          results.push({
+          sendResults.push({
             email: target.email,
             success: false,
             error: err.message,
@@ -57,32 +83,42 @@ export async function POST(
         }
       }
 
-      const successCount = results.filter((r) => r.success).length;
+      // Update campaign status
+      await supabase
+        .from("campaigns")
+        .update({ status: "active" })
+        .eq("id", id);
+
+      const successCount = sendResults.filter((r) => r.success).length;
 
       return NextResponse.json({
         success: true,
         mode: "resend",
-        message: `Campaign launched. ${successCount}/${results.length} emails sent.`,
-        results,
+        message: `Campaign launched. ${successCount}/${sendResults.length} emails sent.`,
+        results: sendResults,
       });
     }
 
-    // Demo mode
+    // Fallback if no Resend key (still updates status)
+    await supabase
+      .from("campaigns")
+      .update({ status: "active" })
+      .eq("id", id);
+
     return NextResponse.json({
       success: true,
-      mode: "demo",
-      message:
-        "Campaign launched in DEMO mode. No real emails sent. Share the tracking links manually.",
-      trackingLinks: campaign.results.map((r) => ({
+      mode: "manual",
+      message: "Campaign activated. No Resend API key found – share tracking links manually.",
+      trackingLinks: results.map((r: any) => ({
         name: r.name,
         email: r.email,
-        url: r.trackingUrl,
+        url: r.tracking_url,
       })),
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Launch campaign error:", error);
     return NextResponse.json(
-      { error: "Failed to launch campaign" },
+      { error: error.message || "Failed to launch campaign" },
       { status: 500 }
     );
   }
@@ -110,7 +146,6 @@ function buildSimulationEmail({
   trackingUrl: string;
   templateName: string;
 }): string {
-  // Simple realistic-looking simulation email
   return `
 <!DOCTYPE html>
 <html>
