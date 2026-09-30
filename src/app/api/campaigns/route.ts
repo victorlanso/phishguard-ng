@@ -1,14 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
-import { campaignStore } from "@/lib/store";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
-  return NextResponse.json({ data: campaignStore.getAll() });
+  try {
+    const supabase = await createClient();
+
+    const { data: campaigns, error } = await supabase
+      .from("campaigns")
+      .select(`
+        *,
+        campaign_results (
+          id, email, name, token, tracking_url, opened, clicked, reported, user_id
+        )
+      `)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    return NextResponse.json({ data: campaigns || [] });
+  } catch (error: any) {
+    console.error("Get campaigns error:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to fetch campaigns" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
-    const { name, templateId, templateName, channel, subject, targets } = body;
+    const { name, templateId, templateName, channel, targets } = body;
 
     if (!name || !templateId) {
       return NextResponse.json(
@@ -17,47 +49,64 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const demoTargets = targets?.length
-      ? targets
-      : [
-          { email: "employee1@demo.com", name: "Adebayo" },
-          { email: "employee2@demo.com", name: "Chioma" },
-          { email: "employee3@demo.com", name: "Emeka" },
-        ];
+    // Create the campaign
+    const { data: campaign, error: campaignError } = await supabase
+      .from("campaigns")
+      .insert({
+        name,
+        template_id: templateId,
+        status: "draft",
+        created_by: user.id,
+      })
+      .select()
+      .single();
 
+    if (campaignError) throw campaignError;
+
+    // Prepare targets
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const finalTargets = targets?.length ? targets : [];
 
-    const results = demoTargets.map((user: any) => {
+    const resultsToInsert = finalTargets.map((t: any) => {
       const token = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
       return {
-        email: user.email,
-        name: user.name,
+        campaign_id: campaign.id,
+        user_id: t.user_id || null,
+        email: t.email,
+        name: t.name || t.email?.split("@")[0] || "User",
         token,
-        trackingUrl: `${baseUrl}/sim/${token}`,
+        tracking_url: `${baseUrl}/sim/${token}`,
         opened: false,
         clicked: false,
         reported: false,
       };
     });
 
-    const campaign = {
-      id: crypto.randomUUID(),
-      name,
-      templateId,
-      templateName: templateName || "Unknown Template",
-      channel: channel || "email",
-      status: "draft",
-      results,
-      created_at: new Date().toISOString(),
-    };
+    if (resultsToInsert.length > 0) {
+      const { error: resultsError } = await supabase
+        .from("campaign_results")
+        .insert(resultsToInsert);
 
-    campaignStore.add(campaign);
+      if (resultsError) throw resultsError;
+    }
 
-    return NextResponse.json({ data: campaign }, { status: 201 });
-  } catch (error) {
+    // Return the full campaign with results
+    const { data: fullCampaign } = await supabase
+      .from("campaigns")
+      .select(`
+        *,
+        campaign_results (
+          id, email, name, token, tracking_url, opened, clicked, reported, user_id
+        )
+      `)
+      .eq("id", campaign.id)
+      .single();
+
+    return NextResponse.json({ data: fullCampaign }, { status: 201 });
+  } catch (error: any) {
     console.error("Create campaign error:", error);
     return NextResponse.json(
-      { error: "Failed to create campaign" },
+      { error: error.message || "Failed to create campaign" },
       { status: 500 }
     );
   }
