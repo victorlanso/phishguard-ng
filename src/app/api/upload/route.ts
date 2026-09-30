@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-// import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,8 +29,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Real Supabase Storage upload (uncomment when ready) ---
-    /*
+    // --- Real Supabase Storage upload ---
     const supabase = await createClient();
 
     const {
@@ -60,20 +59,9 @@ export async function POST(request: NextRequest) {
       data: { publicUrl },
     } = supabase.storage.from("report-screenshots").getPublicUrl(data.path);
 
-    return NextResponse.json({ url: publicUrl, path: data.path });
-    */
-
-    // --- Demo fallback (no Supabase yet) ---
-    // Convert to base64 data URL so the frontend can still preview it
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const base64 = buffer.toString("base64");
-    const dataUrl = `data:${file.type};base64,${base64}`;
-
     return NextResponse.json({
-      url: dataUrl,
-      path: `demo/${Date.now()}-${file.name}`,
-      message: "Demo mode – replace with Supabase Storage in production",
+      url: publicUrl,
+      path: data.path,
     });
   } catch (error) {
     console.error("Upload failed:", error);
