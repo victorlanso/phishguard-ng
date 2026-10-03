@@ -12,31 +12,30 @@ export async function middleware(request: NextRequest) {
 
   try {
     const { createServerClient } = await import("@supabase/ssr");
-
     let supabaseResponse = NextResponse.next({ request });
 
     const supabase = createServerClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll()
-      },
-      setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-        cookiesToSet.forEach(({ name, value }) =>
-          request.cookies.set(name, value)
-        )
-        supabaseResponse = NextResponse.next({
-          request,
-        })
-        cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
-        )
-      },
-    },
-  }
-)
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
+            cookiesToSet.forEach(({ name, value }) =>
+              request.cookies.set(name, value)
+            );
+            supabaseResponse = NextResponse.next({
+              request,
+            });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options)
+            );
+          },
+        },
+      }
+    );
 
     const {
       data: { user },
@@ -66,7 +65,6 @@ export async function middleware(request: NextRequest) {
         .single();
 
       const allowedRoles = ["admin", "champion", "super_admin"];
-
       if (!profile || !allowedRoles.includes(profile.role)) {
         // Not authorized → send back to home
         const url = request.nextUrl.clone();
@@ -75,17 +73,16 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Already logged in and visiting /login → go home
+    // Already logged in and visiting /login → go to campaigns
     if (path === "/login" && user) {
       const url = request.nextUrl.clone();
-      url.pathname = "/";
+      url.pathname = "/campaigns";
       return NextResponse.redirect(url);
     }
 
     return supabaseResponse;
   } catch (error) {
     console.error("Middleware error:", error);
-    // On any error, allow the request (don't block the app)
     return NextResponse.next();
   }
 }
