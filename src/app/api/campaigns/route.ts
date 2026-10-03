@@ -49,17 +49,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the campaign
-    const { data: campaign, error: campaignError } = await supabase
-      .from("campaigns")
-      .insert({
-        name,
-        template_id: templateId,
-        status: "draft",
-        created_by: user.id,
-      })
-      .select()
-      .single();
+ // Only use templateId if it looks like a real UUID
+const isValidUUID = (id: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+const { data: campaign, error: campaignError } = await supabase
+  .from("campaigns")
+  .insert({
+    name,
+    template_id: isValidUUID(templateId) ? templateId : null,
+    status: "draft",
+    created_by: user.id,
+  })
 
     if (campaignError) throw campaignError;
 
