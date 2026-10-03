@@ -1,32 +1,3 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
-export async function GET() {
-  try {
-    const supabase = await createClient();
-
-    const { data: campaigns, error } = await supabase
-      .from("campaigns")
-      .select(`
-        *,
-        campaign_results (
-          id, email, name, token, tracking_url, opened, clicked, reported, user_id
-        )
-      `)
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    return NextResponse.json({ data: campaigns || [] });
-  } catch (error: any) {
-    console.error("Get campaigns error:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to fetch campaigns" },
-      { status: 500 }
-    );
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -40,29 +11,33 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, templateId, templateName, channel, targets } = body;
+    const { name, templateId, targets } = body;
 
-    if (!name || !templateId) {
+    if (!name) {
       return NextResponse.json(
-        { error: "name and templateId are required" },
+        { error: "name is required" },
         { status: 400 }
       );
     }
 
- // Only use templateId if it looks like a real UUID
-const isValidUUID = (id: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    // Only use templateId if it looks like a real UUID
+    const isValidUUID = (id: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-const { data: campaign, error: campaignError } = await supabase
-  .from("campaigns")
-  .insert({
-    name,
-    template_id: isValidUUID(templateId) ? templateId : null,
-    status: "draft",
-    created_by: user.id,
-  })
+    const { data: campaign, error: campaignError } = await supabase
+      .from("campaigns")
+      .insert({
+        name,
+        template_id: isValidUUID(templateId) ? templateId : null,
+        status: "draft",
+        created_by: user.id,
+      })
+      .select()
+      .single();
 
-    if (campaignError) throw campaignError;
+    if (campaignError || !campaign) {
+      throw campaignError || new Error("Failed to create campaign");
+    }
 
     // Prepare targets
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
